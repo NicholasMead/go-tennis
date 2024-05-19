@@ -2,7 +2,7 @@ package tennis
 
 import (
 	"errors"
-	"log"
+	"fmt"
 )
 
 type Tennis struct {
@@ -44,49 +44,45 @@ func (t *Tennis) Score(player string) error {
 	points := score.Game[num]
 	diff := points - score.Game[1-num]
 
-	if points >= 4 && diff >= 2 {
-		score = score.addGame(num)
+	if points < 4 || diff < 2 {
+		return t.dispatch(PointScored{
+			Scorer:    player,
+			GameScore: score.Game,
+		})
+	}
 
-		games := score.Set[num]
-		diff = games - score.Set[1-num]
+	score = score.addGame(num)
 
-		if games >= 6 && diff >= 2 {
-			score = score.addSet(num)
+	games := score.Set[num]
+	diff = games - score.Set[1-num]
 
-			if score.Match[num]/2 >= t.sets/2 {
-				t.dispatch(MatchWon{player})
-				return nil
-			}
-
-			t.dispatch(SetScored{
-				Scorer:     player,
-				MatchScore: score.Match,
-			})
-			return nil
-		}
-
-		t.dispatch(
+	if games < 6 || diff < 2 {
+		return t.dispatch(
 			GameScored{
 				Scorer:   player,
 				SetScore: score.Set,
 			},
 		)
-		return nil
 	}
 
-	t.dispatch(PointScored{
-		Scorer:    player,
-		GameScore: score.Game,
+	score = score.addSet(num)
+
+	if score.Match[num]/2 >= t.sets/2 {
+		return t.dispatch(MatchWon{player})
+	}
+
+	return t.dispatch(SetScored{
+		Scorer:     player,
+		MatchScore: score.Match,
 	})
-	return nil
 }
 
-func (t *Tennis) dispatch(event event) {
+func (t *Tennis) dispatch(event event) error {
 	t.events = append(t.events, event)
-	t.on(event)
+	return t.on(event)
 }
 
-func (t *Tennis) on(event event) {
+func (t *Tennis) on(event event) error {
 	switch ev := event.(type) {
 	case MatchStarted:
 		t.players = ev.Players
@@ -108,8 +104,10 @@ func (t *Tennis) on(event event) {
 		t.score.Game = ev.GameScore
 
 	default:
-		log.Panic("unknown event", event)
+		return fmt.Errorf("unknown event %s", event)
 	}
+
+	return nil
 }
 
 func (t Tennis) getPlayerNum(player string) (int, error) {
